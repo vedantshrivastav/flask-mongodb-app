@@ -1,21 +1,18 @@
-# Flask and MongoDB on Kubernetes (Minikube)
+# Flask + MongoDB on Kubernetes (Minikube)
 
-A Python Flask application connecting to a MongoDB database, hosted on a local Minikube cluster with authentication, persistent volume, autoscaling and resource limits.
+A Python Flask application connected to a MongoDB database, deployed on a local Minikube cluster with authentication, persistent storage, autoscaling and resource management.
 
 ## Endpoints
 
-| End Point | Method | Description                                               |
-| --------- | ------ | --------------------------------------------------------- |
-| `/`       | GET    | Returns "Welcome to the Flask app! The current time is: " |
-| `/data`   | POST   | Inserts information from JSON body into MongoDB           |
-| `/data`   | GET    | Returns all documents stored in MongoDB                   |
+| Endpoint | Method | Description                                                              |
+| -------- | ------ | ------------------------------------------------------------------------ |
+| `/`      | GET    | Returns "Welcome to the Flask app! The current time is: <Date and Time>" |
+| `/data`  | POST   | Inserts the JSON body into MongoDB                                       |
+| `/data`  | GET    | Returns all stored documents                                             |
 
 ## Project Structure
 
 ```
-
-```
-
 flask-mongodb-app/
 ├── app.py
 ├── requirements.txt
@@ -23,43 +20,38 @@ flask-mongodb-app/
 ├── .dockerignore
 ├── README.md
 └── k8s/
-├── mongo-secret.yaml
-├── mongo-pv-pvc.yaml
-├── mongo-statefulset.yaml
-├── mongo-service.yaml
-├── flask-deployment.yaml
-├── flask-service.yaml
-└── flask-hpa.yaml
-
+    ├── mongo-secret.yaml
+    ├── mongo-pv-pvc.yaml
+    ├── mongo-statefulset.yaml
+    ├── mongo-service.yaml
+    ├── flask-deployment.yaml
+    ├── flask-service.yaml
+    └── flask-hpa.yaml
 ```
 
-```
+## Prerequisites
 
-## Requirements
-
-- Docker Desktop (active)
-
+- Docker Desktop (running)
 - Minikube
 - kubectl
-- Docker Hub (this project used vedantshrivastav)
+- A Docker Hub account (this project uses `vedantshrivastav`)
 
 ---
 
-## 1. Building and pushing Docker Image
+## 1. Build and Push the Docker Image
 
-````
 ```bash
 # Build
 docker build -t vedantshrivastav/flask-mongo-app:v1 .
+
 # Log in to Docker Hub
 docker login
+
 # Push
 docker push vedantshrivastav/flask-mongo-app:v1
-````
+```
 
-```
 ### Dockerfile
-```
 
 ```dockerfile
 FROM python:3.9-slim
@@ -71,12 +63,13 @@ EXPOSE 5000
 CMD ["python", "app.py"]
 ```
 
-```
-This will install dependencies, this layer will be cached by Docker speeding up re-building.
+Dependencies are installed before copying `app.py`, so Docker caches that layer and rebuilds are fast when only the code changes.
+
 ---
-## 2. Deployment on Minikube
-### Start cluster
-```
+
+## 2. Deploy on Minikube
+
+### Start the cluster
 
 ```bash
 minikube start --driver=docker --cpus=2 --memory=4096
@@ -84,18 +77,15 @@ minikube addons enable metrics-server
 kubectl get nodes
 ```
 
-```
-This is needed for Horizontal Pod Autoscaler to GET CPU usage.
-### Apply all Manifests
-```
+`metrics-server` is required for the Horizontal Pod Autoscaler to read CPU usage.
+
+### Apply all manifests
 
 ```bash
 kubectl apply -f k8s/
 ```
 
-```
-### Check
-```
+### Verify
 
 ```bash
 kubectl get pods
@@ -104,27 +94,23 @@ kubectl get svc
 kubectl get hpa
 ```
 
-```
-Should show `mongodb-0` and `flask-app` pods (2 of them) in `1/1 Running`, the PVC should be `Bound` and the HPA should show a CPU %.
-### Connecting to Application
-Option 1: Using Minikube Service URL
-```
+Expected: `mongodb-0` and two `flask-app` pods are `1/1 Running`, the PVC is `Bound`, and the HPA shows a CPU percentage.
+
+### Access the app from your machine
+
+Option A (Minikube service URL):
 
 ```bash
 minikube service flask-service --url
 ```
 
-```
-Option 2: Using Port Forwarding
-```
+Option B (port-forward):
 
 ```bash
 kubectl port-forward service/flask-service 5000:5000
 ```
 
-```
-Testing (Windows uses `curl.exe` in PowerShell):
-```
+Test (Windows PowerShell uses `curl.exe`):
 
 ```bash
 curl.exe http://localhost:5000/
@@ -132,166 +118,196 @@ curl.exe -X POST -H "Content-Type: application/json" -d '{\"sampleKey\":\"sample
 curl.exe http://localhost:5000/data
 ```
 
-```
 ---
+
 ## 3. Kubernetes Resources
-| File | Resource | Description |
-| --- | --- | --- |
-| `mongo-secret.yaml` | Secret | Stores MongoDB Username and Password |
-| `mongo-pv-pvc.yaml` | PV & PVC | 1Gi storage for MongoDB |
-| `mongo-statefulset.yaml` | Statefulset | MongoDB with authentication enabled |
-| `mongo-service.yaml` | Service (ClusterIP) | Internal access to MongoDB |
-| `flask-deployment.yaml` | Deployment (2 replicas) | Flask Application |
-| `flask-service.yaml` | Service (NodePort) | Expose Flask Application |
-| `flask-hpa.yaml` | HPA | Scale Flask Application from 2 to 5 replicas based on 70% CPU usage |
-### Enabling Authentication
-Using the official MongoDB image, if `MONGO_INITDB_ROOT_USERNAME` and `MONGO_INITDB_ROOT_PASSWORD` are set as environment variables authentication will be enabled and a root user will be created. These are obtained from `mongo-secret` Secret. The Flask application connects using the same Secret, specifying `username`, `password` and `authSource="admin"`.
-### Persistent Volume
-The PVC `mongo-pvc` is mounted to PV `mongo-pv` (Storage Class: `manual`, `hostPath`: `/data/mongo`). This means that MongoDB will store data in `/data/db`. The data will remain even if the pod gets deleted/restarted.
+
+| File                     | Resource                | Purpose                                  |
+| ------------------------ | ----------------------- | ---------------------------------------- |
+| `mongo-secret.yaml`      | Secret                  | Stores the MongoDB username and password |
+| `mongo-pv-pvc.yaml`      | PV + PVC                | 1Gi persistent storage for MongoDB data  |
+| `mongo-statefulset.yaml` | StatefulSet             | MongoDB with authentication enabled      |
+| `mongo-service.yaml`     | Service (ClusterIP)     | Internal-only access to MongoDB          |
+| `flask-deployment.yaml`  | Deployment (2 replicas) | The Flask application                    |
+| `flask-service.yaml`     | Service (NodePort)      | Exposes Flask outside the cluster        |
+| `flask-hpa.yaml`         | HPA                     | Scales Flask 2 to 5 replicas at 70% CPU  |
+
+### How authentication is enabled
+
+The official MongoDB image creates a root user and turns on authentication when the environment variables `MONGO_INITDB_ROOT_USERNAME` and `MONGO_INITDB_ROOT_PASSWORD` are set. Both come from the `mongo-secret` Secret. Flask reads the same Secret and connects with `username`, `password` and `authSource="admin"`.
+
+### How persistence works
+
+The PVC `mongo-pvc` binds to the PV `mongo-pv` (storage class `manual`, `hostPath: /data/mongo`). It is mounted at `/data/db`, the directory where MongoDB stores its data. Data survives pod deletion and restarts.
+
 ---
-## 4. DNS
-Every cluster will have a DNS service running (CoreDNS). Every time a Service is created a DNS entry will automatically be created:
-```
+
+## 4. DNS Resolution in Kubernetes
+
+Every Kubernetes cluster runs a DNS server (CoreDNS). Whenever a Service is created, CoreDNS automatically creates a DNS record for it:
 
 ```
-..svc.cluster.local
+<service-name>.<namespace>.svc.cluster.local
 ```
 
-```
-For the MongoDB Service in the `default` namespace:
-```
+For the MongoDB Service in the `default` namespace this is:
 
 ```
 mongodb-service.default.svc.cluster.local
 ```
 
-```
-How it works:
-1. All pods will have a `/etc/resolv.conf` pointing to the DNS server in the cluster. This will also include search domains such as `default.svc.cluster.local`.
-2. When the Flask pod attempts to resolve `mongodb-service`, it will automatically append the search domains resulting in the short name being resolved to the long name above.
-3. CoreDNS will return the ClusterIP of the Service.
-4. `kube-proxy` will route traffic to a healthy pod matching the Service selector (`app: mongodb`).
-Pods will have different IPs every time they are recreated. However, the Service will always have the same name and ClusterIP. We therefore connect using the name.
-Flask is connected to MongoDB using the Deployment `MONGO_HOST=mongodb-service`, this is passed to `MongoClient(host=...)` in `app.py`. No IP addresses are hardcoded. As the Service type is `ClusterIP`, MongoDB can only be accessed from within the cluster.
+How it works step by step:
+
+1. Every pod's `/etc/resolv.conf` points to the cluster DNS server and includes search domains such as `default.svc.cluster.local`.
+2. When the Flask pod looks up `mongodb-service`, the search domains are appended automatically, so the short name resolves to the full name above.
+3. CoreDNS returns the **ClusterIP** of the Service.
+4. `kube-proxy` forwards traffic sent to that ClusterIP to a healthy pod matching the Service's selector (`app: mongodb`).
+
+Pod IPs change every time a pod is recreated, but the Service name and ClusterIP stay stable. That is why we use the name instead of an IP.
+
+**How Flask connects to MongoDB:** the Deployment sets `MONGO_HOST=mongodb-service`, and `app.py` passes it to `MongoClient(host=...)`. No IP address is hardcoded. Because the Service is `ClusterIP`, MongoDB is reachable only from inside the cluster.
+
 ---
-## 5. Resource Limits and Requests
-Resources are what Kubernetes will guarantee to be available to the container. The scheduler will use this to place pods onto nodes. The HPA will also use this to calculate CPU usage as a % of resources.
-Limits are the maximum amount of resources a container can use.
-If the container uses more than the CPU limit it will be throttled (slowed down). If it uses more than the memory limit it will be killed (`OOMKilled`) and restarted.
-This stops one pod starving the others, provides predictable scheduling, provides stability on the node and enables autoscaling based on CPU.
-Both Flask and MongoDB have the following values:
-| | CPU | Memory |
-| --- | --- | --- |
-| Request | 200m (0.2 CPU) | 250M |
-| Limit | 500m (0.5 CPU) | 500M |
-Mongo is started with `--wiredTigerCacheSizeGB 0.25` to ensure the cache doesn’t exceed the memory limit and cause OOMKills.
+
+## 5. Resource Requests and Limits
+
+**Requests** are the amount of CPU and memory Kubernetes _guarantees_ to a container. The scheduler uses requests to decide which node a pod can be placed on. The HPA also calculates CPU utilization as a percentage of the request.
+
+**Limits** are the _maximum_ a container may use.
+
+- If a container exceeds its **CPU limit**, it is throttled (slowed down).
+- If it exceeds its **memory limit**, it is killed (`OOMKilled`) and restarted.
+
+**Why they matter:** they prevent one pod from starving others, make scheduling predictable, keep the node stable, and make CPU-based autoscaling possible.
+
+Values used for both Flask and MongoDB:
+
+|         | CPU            | Memory |
+| ------- | -------------- | ------ |
+| Request | 200m (0.2 CPU) | 250M   |
+| Limit   | 500m (0.5 CPU) | 500M   |
+
+MongoDB is started with `--wiredTigerCacheSizeGB 0.25` so its internal cache stays under the 500M memory limit and the pod is not OOMKilled.
+
 ---
-## 6. Design Decisions
-| Design Decision | Reason | Alternatives Considered |
-| --- | --- | --- |
-| Minikube (Docker Driver) | Free, simple and can run locally | kind, k3d, Docker Desktop Kubernetes. Minikube also has simple add-ons such as metrics-server |
-| Statefulset for MongoDB | Provides stable pod name (`mongodb-0`) and stable storage. Ideal for databases | Would work with a Deployment if only 1 replica |
-| 1 MongoDB Replica | Simple with only 1 PVC | Can provide high availability with a replica set (3 pods). However this requires additional configuration outside the scope of this assignment |
-| ClusterIP for MongoDB | Ensures database remains private within the cluster | NodePort/LoadBalancer would expose the DB (not secure) |
-| NodePort for Flask | Works with Minikube (no cloud load balancer) | LoadBalancer (requires `minikube tunnel`), Ingress |
-| Secret for credentials | Means credentials aren’t stored in the image or in the deployment | Hardcoded in code or as env variables (not secure) |
-| Static PV (hostPath) | Meets requirement explicitly | Dynamic provision using default StorageClass (easier but less explicit) |
-| HPA (CPU) (autoscaling/v2) | Required by assignment. 70% target, 2-5 replicas | Memory or custom metric scaling |
-| `python:3.9-slim` | Small image size and compatible with pinned Flask 2.0.2 | Full Python image (Much bigger), Alpine (Potential issues with building) |
-Note: Credentials in `mongo-secret.yaml` are just example values. In production you should use a secret manager or sealed secrets. Never commit passwords to Git. By default, Kubernetes Secrets are not encrypted, just base64 encoded.
+
+## 6. Design Choices
+
+| Choice                            | Reason                                                                          | Alternatives considered                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **Minikube (Docker driver)**      | Free, simple, runs locally                                                      | kind, k3d, Docker Desktop Kubernetes: also fine, Minikube has simple add-ons such as metrics-server |
+| **StatefulSet for MongoDB**       | Gives a stable pod name (`mongodb-0`) and stable storage, which suits databases | A Deployment would work for 1 replica, but does not give stable identity                            |
+| **1 MongoDB replica**             | One PVC, simple, enough for the assignment                                      | A replica set (3 pods) gives high availability but needs extra setup beyond the scope               |
+| **ClusterIP for MongoDB**         | Keeps the database private inside the cluster                                   | NodePort/LoadBalancer would expose the DB, which is insecure                                        |
+| **NodePort for Flask**            | Works on Minikube without a cloud load balancer                                 | LoadBalancer (needs `minikube tunnel`), Ingress (extra controller)                                  |
+| **Secret for credentials**        | Keeps credentials out of the image and the Deployment spec                      | Hardcoding in code or plain env values: insecure                                                    |
+| **Static PV with hostPath**       | Explicitly meets the PV + PVC requirement                                       | Dynamic provisioning with the default StorageClass (simpler, but less explicit)                     |
+| **HPA on CPU (`autoscaling/v2`)** | Required by the assignment: 70% target, 2 to 5 replicas                         | Memory-based or custom-metric scaling                                                               |
+| **`python:3.9-slim`**             | Small image, compatible with the pinned Flask 2.0.2                             | Full Python image (much larger), Alpine (can have build issues)                                     |
+
+**Security note:** the credentials in `mongo-secret.yaml` are sample values for this exercise. In production, use a secret manager or sealed secrets, and do not commit passwords to Git. Kubernetes Secrets are only base64-encoded, not encrypted, by default.
+
 ---
+
 ## 7. Testing
-### 7.1 Authentication
-No credentials (Fail):
-```
+
+### 7.1 Authentication test
+
+Without credentials (fails):
 
 ```bash
 kubectl exec -it mongodb-0 -- mongosh --eval "db.adminCommand('listDatabases')"
 ```
 
-````
-Should return
-fails without authentication
-c:\Users\lenovo\Pictures\Screenshots\Screenshot 2026-11-12 211331.png
-With credentials (Success):
+Result: the command fails because authentication is required.
 
-c:\Users\lenovo\Pictures\Screenshots\Screenshot 2026-11-12 211356.png
+![Auth fails without credentials](screenshots/auth-fail.png)
+
+With credentials (succeeds):
 
 ```bash
 kubectl exec -it mongodb-0 -- mongosh -u admin -p password123 --authenticationDatabase admin --eval "db.adminCommand('listDatabases')"
-````
+```
 
-```
-the list of databases
-c:\Users\lenovo\Pictures\Screenshots\Screenshot 2026-11-12 214042.png
-### 7.2 Interacting with Database and Persistence
-Inserted some records using `POST /data`. Then retrieved them using `GET /data`.
-c:\Users\lenovo\Pictures\Screenshots\Screenshot 2026-11-12 223755.png
-Deleted MongoDB pod using `kubectl delete pod mongodb-0`.
-Once the Statefulset had recreated `mongodb-0`, `GET /data` was run again.
-c:\Users\lenovo\Pictures\Screenshots\Screenshot 2026-11-12 224028.png
-. This proves that the PV/PVC is keeping the data.
-### 7.3 Autoscaling (Simulate High Traffic)
-Busybox pods were created in the cluster to continually send requests to the Flask Service:
-```
+Result: the command succeeds and lists the databases.
+
+![Auth with credentials](screenshots/auth-success-command.png)
+
+![List of databases](screenshots/auth-success-databases.png)
+
+### 7.2 Database interaction and persistence test
+
+1. Inserted records through `POST /data` and read them back with `GET /data`.
+2. Deleted the MongoDB pod: `kubectl delete pod mongodb-0`.
+3. After the StatefulSet recreated `mongodb-0`, ran `GET /data` again.
+
+Data before deleting the pod:
+
+![Data before deleting pod](screenshots/persistence-before.png)
+
+Data after `mongodb-0` was recreated:
+
+![Data after pod restart](screenshots/persistence-after.png)
+
+Result: the same records are still returned, which confirms the PV/PVC keeps data across pod restarts.
+
+### 7.3 Autoscaling test (simulated high traffic)
+
+**Method:** started busybox pods inside the cluster that send continuous requests to the Flask Service:
 
 ```bash
 kubectl run load-generator --image=busybox:1.36 --restart=Never -- /bin/sh -c "while true; do wget -q -O- http://flask-service:5000/ > /dev/null; done"
 ```
 
-```
-Extra generators were created (`load-generator-2`, `load-generator-3`). This sends requests to the Service so traffic is distributed evenly across all Flask pods. Progress was monitored using:
-```
+Additional generators (`load-generator-2`, `load-generator-3`) were started to increase load. Requests go through the Service, so traffic is spread across all Flask pods. Progress was watched with:
 
 ```bash
 kubectl get hpa flask-hpa -w
 kubectl get pods -w
 ```
 
-```
-Results:
-| Stage | CPU (Target: 70%) | Replicas |
-| --- | --- | --- |
-| Before Load | 1%-8% | 2 |
-| Whilst Loading | 144% | 2 -> 4 -> 5 (Max) |
-| After Load has finished | Drops to near 0% | 2 (After ~5min stabilisation window) |
-HPA scaled up to max amount of 5 replicas. New pods went through `Pending`, `ContainerCreating` and `Running`. Once generators were deleted, HPA scaled back down to min amount of 2 replicas.
-(Please add screenshots of HPA before, during and after load and pod list with 5 replicas.)
-HPA before the load test
+**Results:**
 
-c:\Users\lenovo\Pictures\Screenshots\Screenshot 2026-11-12 212453.png
+| Stage              | CPU (target 70%) | Replicas                                           |
+| ------------------ | ---------------- | -------------------------------------------------- |
+| Before load        | 1% to 8%         | 2                                                  |
+| During load        | 144%             | 2, then 4, then 5 (maximum)                        |
+| After load stopped | drops to near 0% | back to 2 after the ~5 minute stabilization window |
 
-HPA during the load test
-replicas reached to 5
+The HPA scaled up to the maximum of 5 replicas, and the new pods moved through `Pending`, `ContainerCreating` and `Running`. After the load generators were deleted, the HPA scaled back down to the minimum of 2 replicas.
 
-c:\Users\lenovo\Pictures\Screenshots\Screenshot 2026-11-12 212815.png
+**HPA before the load test** (2 replicas, low CPU)
 
-flask pods  - 5 pods
+![HPA before load](screenshots/hpa-before.png)
 
-c:\Users\lenovo\Pictures\Screenshots\Screenshot 2026-11-12 212938.png
+**HPA during the load test** (CPU at 144%, replicas reached the maximum of 5)
 
-HPA after the load
-back to 2 replicas
+![HPA during load](screenshots/hpa-during.png)
 
-c:\Users\lenovo\Pictures\Screenshots\Screenshot 2026-11-12 213621.png
-### 7.4 Issues
-| Issue | Cause | Fix |
-| --- | --- | --- |
-| `curl -X POST ...` failed in PowerShell. Error: Headers parameter | `curl` is an alias for `Invoke-WebRequest` in PowerShell | Use `curl.exe` (or `Invoke-RestMethod`) |
-| `mongodb-0` stuck in `Pending`. Error: `persistentvolumeclaim "mongo-pvc" not found` | `mongo-pv-pvc.yaml` was blank (0 bytes). PV/PVC not created | Copied content, saved and reapplied. Checked file sizes using `dir k8s` |
-| `mongodb-0` stuck in `ContainerCreating` for a few minutes | Slow initial pull of `mongo:6.0` image | Waited for image to be pulled (Optionally: `minikube image load mongo:6.0`) |
-| `minikube` not recognised in terminal | PATH not updated in currently open terminal | Open new terminal or use `kubectl port-forward` to access application |
-| HPA showing `` CPU initially | metrics-server requires a short amount of time to initialise | Enable add-on `metrics-server` and wait ~1 minute. |
+**Flask pods during the load test** (5 pods running)
+
+![5 Flask pods](screenshots/pods-5.png)
+
+**HPA after the load stopped** (back to 2 replicas)
+
+![HPA after load](screenshots/hpa-after.png)
+
+### 7.4 Issues encountered
+
+| Issue                                                                             | Cause                                                                               | Fix                                                                                     |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `curl -X POST ...` failed in PowerShell with a `Headers` parameter error          | In PowerShell, `curl` is an alias for `Invoke-WebRequest`                           | Used `curl.exe` (or `Invoke-RestMethod`)                                                |
+| `mongodb-0` stuck in `Pending` with `persistentvolumeclaim "mongo-pvc" not found` | `mongo-pv-pvc.yaml` was saved empty (0 bytes), so the PV and PVC were never created | Pasted the content, saved the file and re-applied it. Checked file sizes with `dir k8s` |
+| `mongodb-0` stayed in `ContainerCreating` for several minutes                     | Slow first-time pull of the `mongo:6.0` image                                       | Waited for the pull to finish (optionally `minikube image load mongo:6.0`)              |
+| `minikube` was not recognized in the terminal                                     | PATH was not refreshed in the open terminal after install                           | Opened a new terminal, or used `kubectl port-forward` to reach the app                  |
+| HPA showed `<unknown>` CPU at first                                               | metrics-server needs a short warm-up                                                | Enabled the `metrics-server` add-on and waited about a minute                           |
+
 ---
-## 8. Clean Up
-```
+
+## 8. Cleanup
 
 ```bash
 kubectl delete -f k8s/
 minikube stop
 # minikube delete   (removes the cluster completely)
-```
-
-```
-
 ```
